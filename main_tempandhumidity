@@ -1,0 +1,117 @@
+from machine import Pin, I2C
+import time
+import ustruct as struct
+import urequests
+import utime
+from neopixel import NeoPixel
+import machine
+
+np = NeoPixel(machine.Pin(14), 3)
+
+np.fill((50,50,0))
+np.write()
+
+
+
+
+def do_connect():
+    import network
+    sta_if = network.WLAN(network.STA_IF)
+    if not sta_if.isconnected():
+        #print('connecting to network...')
+        sta_if.active(True)
+        sta_if.connect('SSID', 'PASSWORD')
+        while not sta_if.isconnected():
+            pass
+    print('network config:', sta_if.ifconfig())
+    np[1] = (25,25,25)
+    np.write()
+
+np[1] = (255,0,0)
+np.write()
+do_connect()
+
+
+
+i2c = I2C(scl=Pin(5), sda=Pin(4), freq=100000) 
+
+
+devices = I2C.scan(i2c)
+
+time_to_write = utime.time()
+#print(time_to_write)
+humid = "empty"
+temp = "empty"
+#print(devices)
+while True:
+  np[2] = (0,0,0)
+  np.write()
+  readed = False
+  try:
+    i2c.writeto(92,bytes([0x00]))
+    time.sleep(0.01)
+
+    cmd = [0x03, 0x00 & 0xFF, 2]
+    i2c.writeto(92, bytes(cmd))
+    time.sleep(0.01)  #.002
+
+
+    humidity = i2c.readfrom(92,6)
+
+    humid = humidity[2:-2]
+    humid = struct.unpack(">H", humid)
+    humid = humid[0]/10
+
+    i2c.writeto(92,bytes([0x00]))
+    time.sleep(0.01)
+
+    cmd = [0x03, 0x02 & 0xFF, 2]
+    i2c.writeto(92, bytes(cmd))
+    time.sleep(0.01)
+
+
+    temperature = i2c.readfrom(92,6)
+
+    temp = temperature[2:-2]
+    temp = struct.unpack(">H", temp)
+    temp = temp[0]/10
+    
+    readed = True
+    #print("%RH: " + str(humid) + "   Temp: " + str(temp))
+    
+    
+    loop_runs += 1
+  except:
+    pass
+  
+  if utime.time() >= time_to_write:
+    try:
+      messagetoplant = "Temperature:%20" + str(temp) + "C%20%20%20%20Humidity:" + str(humid) + "%"
+      print(messagetoplant)
+      response = urequests.get("APIURL?msg=" + str(messagetoplant))
+      print(response.text)
+      response.close() 
+      #print("Wrote that shit to a server")
+      np[0] = (0,25,0)
+      np.write()
+      
+      time_to_write = utime.time() + 10
+      
+    except:
+      np[0] = (25,0,0)
+      np.write()
+      pass
+    
+ 
+
+  #print("Time to sleep...")
+  #time_left =  str(utime.time()) + " / " + str(time_to_write)
+  #print(time_left)
+  time.sleep(2)
+  np[2] = (0,25,0)
+  np.write()
+  time.sleep(2)
+
+
+
+
